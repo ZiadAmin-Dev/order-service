@@ -1,0 +1,47 @@
+{
+  "module": "agents",
+  "endpoints": [
+    {
+      "method": "POST",
+      "route": "/api/agents/me/presence",
+      "purpose": "Update delivery agent presence, online status, and GPS location",
+      "actor": "delivery_agent",
+      "auth": "JWT required (role=delivery_agent)",
+      "permission": null,
+      "regionRequirements": "X-Region or ?region",
+      "headers": [],
+      "requestDTO": "UpdatePresenceDTO",
+      "responseDTO": "AgentPresenceResponseDTO",
+      "successCode": 200,
+      "errorCodes": [400, 401, 500],
+      "idempotency": false,
+      "transactions": false,
+      "cacheBehavior": "Updates Redis Geospatial key geo:agents:<region> and presence hash (TTL 30s)",
+      "invalidation": "None",
+      "databaseDependencies": ["agent_presence"],
+      "coreDependencies": [],
+      "webSocketSideEffects": []
+    },
+    {
+      "method": "GET",
+      "route": "/api/agents/me/earnings",
+      "purpose": "Query delivery agent cumulative earnings and ledger",
+      "actor": "delivery_agent",
+      "auth": "JWT required (role=delivery_agent)",
+      "permission": null,
+      "regionRequirements": "X-Region or ?region",
+      "headers": [],
+      "requestDTO": null,
+      "responseDTO": "AgentEarningsSummaryResponseDTO",
+      "successCode": 200,
+      "errorCodes": [401, 500],
+      "idempotency": false,
+      "transactions": false,
+      "cacheBehavior": "Cached (TTL 60s)",
+      "invalidation": "Invalidate on order fulfillment",
+      "databaseDependencies": ["agent_earnings"],
+      "coreDependencies": [],
+      "webSocketSideEffects": []
+    }
+  ]
+}

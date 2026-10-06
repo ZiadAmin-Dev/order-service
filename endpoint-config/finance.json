@@ -1,0 +1,47 @@
+{
+  "module": "finance",
+  "endpoints": [
+    {
+      "method": "GET",
+      "route": "/api/finance/restaurants/:restaurantId/balance",
+      "purpose": "Query restaurant running financial balance",
+      "actor": "restaurant_user (owner), system_admin",
+      "auth": "JWT required",
+      "permission": "rbac(orders:finance:view_balance), requireRestaurantMember",
+      "regionRequirements": "X-Region or ?region",
+      "headers": [],
+      "requestDTO": null,
+      "responseDTO": "RestaurantBalanceResponseDTO",
+      "successCode": 200,
+      "errorCodes": [401, 403, 404, 500],
+      "idempotency": false,
+      "transactions": false,
+      "cacheBehavior": "Cached (TTL 30s)",
+      "invalidation": "Invalidate on settlement or payout",
+      "databaseDependencies": ["restaurant_balances"],
+      "coreDependencies": [],
+      "webSocketSideEffects": []
+    },
+    {
+      "method": "POST",
+      "route": "/api/finance/restaurants/:restaurantId/payouts",
+      "purpose": "Record external bank payout disbursement to restaurant",
+      "actor": "system_admin",
+      "auth": "JWT required (role=system_admin)",
+      "permission": null,
+      "regionRequirements": "X-Region or ?region",
+      "headers": ["Idempotency-Key"],
+      "requestDTO": "CreatePayoutDTO",
+      "responseDTO": "PayoutResponseDTO",
+      "successCode": 201,
+      "errorCodes": [400, 401, 403, 404, 409, 500],
+      "idempotency": true,
+      "transactions": true,
+      "cacheBehavior": "None",
+      "invalidation": "Invalidate restaurant balance cache",
+      "databaseDependencies": ["restaurant_balances", "transactions"],
+      "coreDependencies": [],
+      "webSocketSideEffects": []
+    }
+  ]
+}
