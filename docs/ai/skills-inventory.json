@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "generated": "2026-10-27",
+    "opencodeVersion": "2.0.29",
+    "discoveryPath": ".agents/skills/<id>/SKILL.md",
+    "notes": "OpenCode v2.0.29 loads .agents/skills/<id>/SKILL.md natively (https://opencode.ai/docs/skills/). No .opencode/ and no global skills configured. Built-in skills 'report' and 'opencode' ship with OpenCode and are not on disk here."
+  },
+  "skills": [
+    {"id": "api-contract-review", "name": "api-contract-review", "path": ".agents/skills/api-contract-review/SKILL.md", "source": "existing-custom", "category": "backend", "status": "discovered", "priority": "existing", "relatedSkills": ["response-dto-validation"], "verificationNotes": "Audits endpoints against docs/api-contracts.md and endpoint-config/*.json."},
+    {"id": "database-review", "name": "database-review", "path": ".agents/skills/database-review/SKILL.md", "source": "existing-custom", "category": "database", "status": "discovered", "priority": "existing", "relatedSkills": ["prevent-n-plus-one"], "verificationNotes": "Includes region-sharding key and transaction-boundary checks per AGENTS.md 6-7."},
+    {"id": "dependency-injection-review", "name": "dependency-injection-review", "path": ".agents/skills/dependency-injection-review/SKILL.md", "source": "existing-custom", "category": "architecture", "status": "discovered", "priority": "existing", "relatedSkills": [], "verificationNotes": null},
+    {"id": "prevent-n-plus-one", "name": "prevent-n-plus-one", "path": ".agents/skills/prevent-n-plus-one/SKILL.md", "source": "existing-custom", "category": "database", "status": "discovered", "priority": "existing", "relatedSkills": ["database-review"], "verificationNotes": null},
+    {"id": "response-dto-validation", "name": "response-dto-validation", "path": ".agents/skills/response-dto-validation/SKILL.md", "source": "existing-custom", "category": "backend", "status": "discovered", "priority": "existing", "relatedSkills": ["api-contract-review"], "verificationNotes": null},
+    {"id": "testing-and-debugging", "name": "testing-and-debugging", "path": ".agents/skills/testing-and-debugging/SKILL.md", "source": "existing-custom", "category": "testing", "status": "discovered", "priority": "existing", "relatedSkills": [], "verificationNotes": null},
+    {"id": "opencode", "name": "OpenCode", "path": "built-in", "source": "built-in", "category": "tool", "status": "unverified", "priority": null, "relatedSkills": [], "verificationNotes": null},
+    {"id": "report", "name": "Report", "path": "built-in", "source": "built-in", "category": "tool", "status": "unverified", "priority": null, "relatedSkills": [], "verificationNotes": null}
+  ],
+  "crossRepoContract": {
+    "publisher": "core-service (.opencode/skills/event-outbox-publishing/SKILL.md)",
+    "sharedContractDoc": "docs/core-service-integration.md (this repo)",
+    "consumerRules": "Dedupe by core-events:dedupe:{event_id}; core-service repo is READ-ONLY per AGENTS.md 1."
+  },
+  "knownGaps": [
+    "Smaller library than core-service (6 vs 37): no skills for caching, pagination, retries/timeouts, idempotency, security review, TS conventions. Extension proposals live in skills-research-report.md 5; nothing was installed in this audit."
+  ]
+}
