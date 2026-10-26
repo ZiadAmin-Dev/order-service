@@ -6,16 +6,18 @@ share context.
 
 ## 1. Baseline (verified facts)
 
-- **6 project-local skills on disk** under `.agents/skills/`, each with valid YAML frontmatter
+- **6 project-local skills on disk** under `.opencode/skills/`, each with valid YAML frontmatter
   (`name`, `description`) and audit-oriented instructions:
   `api-contract-review`, `database-review`, `dependency-injection-review`, `prevent-n-plus-one`,
   `response-dto-validation`, `testing-and-debugging`.
-- OpenCode v2.0.29 documents `.agents/skills/<id>/SKILL.md` as an official discovery location
+- OpenCode v2.0.29 documents `.opencode/skills/<id>/SKILL.md` as an official discovery location
   (https://opencode.ai/docs/skills/), so these are expected to be discoverable. Per-file live
   invocation was **not** exercised in this repo during the audit (read-only session) — statuses
   recorded as `discovered`, not `verified`.
-- **No** `.opencode/` directory and **no global skills** (`~/.config/opencode/opencode.jsonc`
-  contains only `$schema`).
+- At audit time the skills lived under `.agents/skills/` (gitignored). On 2026-10-27 they were
+  migrated to `.opencode/skills/` (OpenCode-native path); `.agents/` was removed and `.opencode/`
+  was added to `.gitignore` (untracked, matching core-service's convention).
+- **No global skills** (`~/.config/opencode/opencode.jsonc` contains only `$schema`).
 - **2 built-in OpenCode skills** (`opencode`, `report`) are available off-disk.
 - Repo instruction system: `AGENTS.md` (8 invariant sections incl. read-only core-service boundary,
   region sharding §6, monetary minor units §5, idempotency §8) is active as system instructions.
@@ -65,11 +67,15 @@ Compared against the categories audited in core-service and this repo's invarian
 2. Optional: caching / retries / security skills to match core-service coverage parity.
 3. `docs/ai/skills-inventory.json` was written as structured JSON and parsed at creation
    (verified: `ConvertFrom-Json` equivalent validation not re-run here — flagged for review).
-4. If this repo later gains `.opencode/` skills, remember OpenCode loads **both** `.agents/` and
-   `.opencode/` paths — keep one canonical home to avoid ID collision confusion.
+4. One canonical home for skills now exists (`.opencode/skills/` after the migration). If any
+   future directory (e.g. re-adding `.agents/`) is used alongside it, remember OpenCode loads
+   **both** paths — avoid ID collisions.
 
 ## 6. What changed in this repo
 
 - Added only: `docs/ai/skills-catalog.md`, `docs/ai/skills-inventory.json`,
   `docs/ai/skill-workflows.md`, `docs/ai/skills-research-report.md` (this file).
-- No source code, migrations, AGENTS.md, `.gitignore`, or existing docs were modified.
+- Post-audit migration (user-requested): skills moved `.agents/skills/` → `.opencode/skills/`;
+  `.agents/` deleted; `.opencode/` added to `.gitignore` (skills remain untracked). An empty
+  unreferenced `.opencode/skills/quick-bite-review/` leftover folder was found during migration and
+  deleted. No source code, migrations, AGENTS.md, or existing docs were modified.

@@ -13,3 +13,6 @@ AGENTS.md
 
 # local experimentation scripts — not tracked
 play/
+
+# opencode project-local skills - not tracked
+.opencode/

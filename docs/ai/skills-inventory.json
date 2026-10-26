@@ -2,8 +2,8 @@
   "meta": {
     "generated": "2026-10-27",
     "opencodeVersion": "2.0.29",
-    "discoveryPath": ".agents/skills/<id>/SKILL.md",
-    "notes": "OpenCode v2.0.29 loads .agents/skills/<id>/SKILL.md natively (https://opencode.ai/docs/skills/). No .opencode/ and no global skills configured. Built-in skills 'report' and 'opencode' ship with OpenCode and are not on disk here."
+    "discoveryPath": ".opencode/skills/<id>/SKILL.md",
+    "notes": "Skills migrated from .agents/skills/ to .opencode/skills/ on 2026-10-27; .opencode/ is gitignored (untracked local library). No global skills configured. Built-in skills 'report' and 'opencode' ship with OpenCode and are not on disk here."
   },
   "skills": [
     {"id": "api-contract-review", "name": "api-contract-review", "path": ".agents/skills/api-contract-review/SKILL.md", "source": "existing-custom", "category": "backend", "status": "discovered", "priority": "existing", "relatedSkills": ["response-dto-validation"], "verificationNotes": "Audits endpoints against docs/api-contracts.md and endpoint-config/*.json."},

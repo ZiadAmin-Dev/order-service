@@ -3,7 +3,7 @@
 Which of the 6 available skills to use per task, in what order, and when to skip. The skill set
 here is deliberately audit-oriented; for writing new code, follow `AGENTS.md` invariants directly.
 
-Invocation: OpenCode v2.0.29 loads `.agents/skills/<id>/SKILL.md` automatically when a task matches
+Invocation: OpenCode v2.0.29 loads `.opencode/skills/<id>/SKILL.md` automatically when a task matches
 its description; users may also invoke explicitly (`@api-contract-review`, etc.). Do not chain
 multiple audits reflexively — each is a full read-through pass.
 

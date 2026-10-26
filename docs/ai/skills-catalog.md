@@ -5,10 +5,11 @@ Generated 2026-10-27 against OpenCode **v2.0.29**. Machine-readable twin:
 
 ## Structure
 
-OpenCode discovers skills from `.agents/skills/<id>/SKILL.md` (a documented OpenCode discovery path,
-alongside `.opencode/skills/`, which this repo does not use). All 6 skills carry valid YAML
-frontmatter (`name` + `description`). Two built-in skills (`opencode`, `report`) ship with
-OpenCode and are not on disk in this repo.
+OpenCode discovers skills from `.opencode/skills/<id>/SKILL.md` (native path). The 6 skills were
+migrated from `.opencode/skills/` on 2026-10-27; the `.agents/` directory was removed and `.opencode/`
+is gitignored (untracked local library, matching the core-service convention). All 6 skills carry
+valid YAML frontmatter (`name` + `description`). Two built-in skills (`opencode`, `report`) ship
+with OpenCode and are not on disk in this repo.
 
 No global skills are configured: `~/.config/opencode/opencode.jsonc` contains only `$schema`.
 
@@ -28,7 +29,7 @@ No global skills are configured: `~/.config/opencode/opencode.jsonc` contains on
 ## Availability status legend
 
 - **discovered** — file on disk, frontmatter valid. Per-file live-invocation testing was not
-  performed for this repo in the audit session (OpenCode v2.0.29 loads `.agents/skills/*` per
+  performed for this repo in the audit session (OpenCode v2.0.29 loads `.opencode/skills/*` per
   https://opencode.ai/docs/skills/).
 - **unverified** — behavior accepted as documented (the two built-ins).
 
