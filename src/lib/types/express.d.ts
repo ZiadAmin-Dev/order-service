@@ -1,7 +1,7 @@
 declare namespace Express {
     interface Request {
         correlationId?: string;
-        region?: string;
+        region?: string; // The region of the request, if applicable
         user?: {
             userId: number;
             role: string;

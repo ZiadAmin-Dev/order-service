@@ -80,4 +80,11 @@ export class RedisCacheProvider implements ICacheProvider {
     async close(): Promise<void> {
         await this.client.quit();
     }
+
+    async trySet(key: string, value: string, ttlSeconds?: number): Promise<boolean> {
+        const res = ttlSeconds
+            ? await this.client.set(key, value, "EX", ttlSeconds, "NX")
+            : await this.client.set(key, value, "NX");
+        return res === "OK";
+    }
 }

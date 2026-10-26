@@ -1,57 +1,44 @@
-import { IncomingMessage } from "http";
-import { parse as parseUrl } from "url";
-import { verifyAccessToken, JwtPayload } from "../auth/jwt";
+import type {IncomingMessage} from "http";
+import {verifyAccessToken, JwtPayload} from "../auth/jwt";
+import {WsNoTokenError} from "./errors";
 
-export interface AuthenticatedWebSocketContext {
-    user: JwtPayload;
-    authorizedRooms: Set<string>;
+/**
+ * Token sources, in order:
+ *   1. `auth.token`           - native/mobile clients pass it via io(url, {auth:{token}})
+ *   2. `access_token` cookie  - browser sessions reuse the HTTP login cookie
+ * Query-string tokens are intentionally NOT supported (they leak into logs).
+ */
+export function authenticateHandshake(handshake: {
+    auth?: {token?: string};
+    headers: IncomingMessage["headers"];
+}): JwtPayload {
+    const token =
+        handshake.auth?.token ??
+        extractCookie(handshake.headers.cookie, "access_token");
+
+    if (!token) throw WsNoTokenError;
+    return verifyAccessToken(token);
 }
 
-export function authenticateWebSocket(req: IncomingMessage): AuthenticatedWebSocketContext | null {
-    try {
-        const parsed = parseUrl(req.url || "", true);
-        let token = (parsed.query.token as string) || (parsed.query.access_token as string);
-
-        if (!token && req.headers.cookie) {
-            const cookies = Object.fromEntries(
-                req.headers.cookie.split(";").map((c) => {
-                    const [k, ...v] = c.trim().split("=");
-                    return [k, v.join("=")];
-                })
-            );
-            token = cookies.access_token;
-        }
-
-        if (!token) return null;
-
-        const user = verifyAccessToken(token);
-        const authorizedRooms = new Set<string>();
-
-        // Customer room
-        authorizedRooms.add(`customer:${user.userId}`);
-
-        // Delivery agent room
-        if (user.role === "delivery_agent") {
-            authorizedRooms.add(`agent:${user.userId}`);
-        }
-
-        // Restaurant & Branch rooms
-        if (user.restaurantId) {
-            authorizedRooms.add(`restaurant:${user.restaurantId}`);
-        }
-        if (user.branchIds && Array.isArray(user.branchIds)) {
-            for (const bId of user.branchIds) {
-                authorizedRooms.add(`branch:${bId}`);
-            }
-        }
-
-        // Admin room
-        if (user.role === "system_admin") {
-            authorizedRooms.add("admin:all");
-        }
-
-        return { user, authorizedRooms };
-    } catch {
-        return null;
+/** Channels (socket.io rooms) the user is allowed to join. */
+export function permittedChannels(user: JwtPayload): Set<string> {
+    const allowed = new Set<string>([`customer:${user.userId}`]);
+    if (user.role === "restaurant_user" && user.restaurantId) {
+        allowed.add(`restaurant:${user.restaurantId}`);
+        for (const b of user.branchIds ?? []) allowed.add(`branch:${b}`);
     }
+    if (user.role === "delivery_agent") {
+        allowed.add(`agent:${user.userId}`);
+    }
+    return allowed;
+}
+
+function extractCookie(cookieHeader: string | undefined, name: string): string | null {
+    if (!cookieHeader) return null;
+    for (const part of cookieHeader.split(";")) {
+        const eq = part.indexOf("=");
+        if (eq < 0) continue;
+        if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
+    }
+    return null;
 }

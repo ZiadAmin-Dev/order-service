@@ -1,110 +1,143 @@
-import amqp, { Channel, ChannelModel } from "amqplib";
-import { IMessageBroker, MessageContext } from "../message-broker.interface";
+import amqp from "amqp-connection-manager";
+import type {
+    AmqpConnectionManager,
+    ChannelWrapper,
+} from "amqp-connection-manager";
+import type {ConfirmChannel, ConsumeMessage as AmqpConsumeMessage} from "amqplib";
+import type {
+    ConsumeMessage,
+    ConsumerOptions,
+    IMessageBroker,
+} from "../message-broker.interface";
+import type {RabbitMQConfig} from "./rabbitmq.types";
 
-export interface RabbitMQConfig {
-    url: string;
-    prefetch?: number;
-    exchange?: string;
-    queue?: string;
-    bindings?: string[];
-    dlx?: string;
-    dlq?: string;
-}
-
+/**
+ * Mental model
+ * ------------
+ *   - 1 TCP connection -> many cheap virtual "channels".
+ *   - Each channel here is a ChannelWrapper: it auto-reconnects and replays
+ *     its `setup(ch)` function every time the underlying channel reopens.
+ *   - We keep ONE long-lived publisher channel and open extra channels for
+ *     declaring topology and for consuming. One channel = one purpose.
+ */
 export class RabbitMQClient implements IMessageBroker {
-    private connection: ChannelModel | null = null;
-    private channel: Channel | null = null;
-    private readonly config: RabbitMQConfig;
+    private connection: AmqpConnectionManager | null = null;
+    private publishChannel: ChannelWrapper | null = null;
 
-    constructor(config: RabbitMQConfig) {
-        this.config = config;
-    }
+    constructor(private readonly config: RabbitMQConfig) {}
 
+    // Open the TCP connection + the long-lived publisher channel. Idempotent.
     async connect(): Promise<void> {
-        try {
-            this.connection = await amqp.connect(this.config.url);
-            this.channel = await this.connection.createChannel();
+        if (this.connection) return;
 
-            if (this.config.prefetch) {
-                await this.channel.prefetch(this.config.prefetch);
-            }
+        const reconnectSec = Math.max(1, Math.round(this.config.reconnectInitialMs / 1000));
+        this.connection = amqp.connect([this.config.url], {reconnectTimeInSeconds: reconnectSec});
 
-            if (this.config.exchange) {
-                await this.channel.assertExchange(this.config.exchange, "topic", { durable: true });
-            }
-
-            if (this.config.dlx && this.config.dlq) {
-                await this.channel.assertExchange(this.config.dlx, "direct", { durable: true });
-                await this.channel.assertQueue(this.config.dlq, { durable: true });
-                await this.channel.bindQueue(this.config.dlq, this.config.dlx, "");
-            }
-
-            if (this.config.queue) {
-                const queueArgs = this.config.dlx
-                    ? { "x-dead-letter-exchange": this.config.dlx }
-                    : undefined;
-
-                await this.channel.assertQueue(this.config.queue, {
-                    durable: true,
-                    arguments: queueArgs,
-                });
-
-                if (this.config.exchange && this.config.bindings) {
-                    for (const binding of this.config.bindings) {
-                        await this.channel.bindQueue(
-                            this.config.queue,
-                            this.config.exchange,
-                            binding.trim()
-                        );
-                    }
-                }
-            }
-        } catch (err) {
-            console.warn("RabbitMQ connection warning (broker may be unavailable in test env):", (err as Error).message);
-        }
+        // Typing the setup arg as ConfirmChannel turns on publisher confirms
+        // automatically (broker acks every publish).
+        this.publishChannel = this.connection.createChannel({
+            json: false,
+            setup: async (_ch: ConfirmChannel) => {
+                /* publisher channel needs no setup */
+            },
+        });
+        await this.publishChannel.waitForConnect();
     }
 
-    async consume(
-        queue: string,
-        handler: (payload: any, ctx: MessageContext) => Promise<void>
-    ): Promise<void> {
-        if (!this.channel) return;
+    // Tear everything down. Already-closed errors are fine -> swallow them.
+    async close(): Promise<void> {
+        await this.publishChannel?.close().catch(() => {});
+        await this.connection?.close().catch(() => {});
+        this.publishChannel = null;
+        this.connection = null;
+    }
 
-        await this.channel.consume(queue, async (msg) => {
-            if (!msg) return;
+    // Make sure the exchanges/queues/bindings exist.
+    // Strategy: open a throwaway channel, let its setup run the asserts, close it.
+    async declareTopology(opts: ConsumerOptions): Promise<void> {
+        await this.connect();
+        const ch = this.connection!.createChannel({
+            json: false,
+            setup: (c: ConfirmChannel) => assertTopology(c, opts),
+        });
+        await ch.waitForConnect(); // wait for setup to finish
+        await ch.close();
+    }
 
-            const ack = () => {
-                try {
-                    this.channel?.ack(msg);
-                } catch {}
-            };
+    // Open a long-lived consumer channel.
+    // Everything inside `setup` re-runs on every reconnect, so topology and
+    // the consumer registration are restored automatically after broker restarts.
+    async consume( opts: ConsumerOptions, handler: (msg: ConsumeMessage) => Promise<void>,): Promise<void> {
+        
+        await this.connect();
+        const ch = this.connection!.createChannel({
+            json: false,
+            setup: async (c: ConfirmChannel) => {
+                await assertTopology(c, opts);
+                await c.prefetch(opts.prefetch); // max in-flight unacked messages
+                await c.consume(
+                    opts.queue,
+                    (raw) => handleMessage(c, raw, handler),
+                    {noAck: false}, // we'll ack/nack manually
+                );
+            },
+        });
+        await ch.waitForConnect();
+    }
 
-            const nack = (requeue: boolean = false) => {
-                try {
-                    this.channel?.nack(msg, false, requeue);
-                } catch {}
-            };
-
-            try {
-                const content = JSON.parse(msg.content.toString());
-                const ctx: MessageContext = {
-                    routingKey: msg.fields.routingKey,
-                    correlationId: msg.properties.correlationId,
-                    ack,
-                    nack,
-                };
-                await handler(content, ctx);
-            } catch (err) {
-                console.error("RabbitMQ consumer error:", err);
-                nack(false); // Send to DLQ
-            }
+    // Publish through the long-lived publisher channel.
+    // persistent:true -> survives broker restart (when paired with a durable queue).
+    async publish(exchange: string, routingKey: string, body: Buffer): Promise<void> {
+        await this.connect();
+        await this.publishChannel!.publish(exchange, routingKey, body, {
+            persistent: true,
+            contentType: "application/json",
         });
     }
+}
 
-    async close(): Promise<void> {
-        try {
-            await this.channel?.close();
-            await this.connection?.close();
-        } catch {}
+// ---------- helpers ----------
+
+// "assert" = create if missing, else verify settings match. Always idempotent.
+async function assertTopology(ch: ConfirmChannel, opts: ConsumerOptions): Promise<void> {
+    await ch.assertExchange(opts.exchange, "topic", {durable: true});
+
+    // Optional dead-letter setup: rejected/expired messages land here.
+    if (opts.deadLetterExchange && opts.deadLetterQueue) {
+        await ch.assertExchange(opts.deadLetterExchange, "topic", {durable: true});
+        await ch.assertQueue(opts.deadLetterQueue, {durable: true});
+        await ch.bindQueue(opts.deadLetterQueue, opts.deadLetterExchange, "#"); // catch-all
+    }
+
+    const queueArgs: Record<string, string> = {};
+    if (opts.deadLetterExchange) queueArgs["x-dead-letter-exchange"] = opts.deadLetterExchange;
+
+    await ch.assertQueue(opts.queue, {durable: true, arguments: queueArgs});
+    for (const key of opts.bindingKeys) {
+        await ch.bindQueue(opts.queue, opts.exchange, key);
+    }
+}
+
+// Wrap the raw amqplib message in our broker-agnostic shape, run the handler,
+// ack on success / nack on throw.
+async function handleMessage(
+    ch: ConfirmChannel,
+    raw: AmqpConsumeMessage | null,
+    handler: (msg: ConsumeMessage) => Promise<void>,
+): Promise<void> {
+    if (!raw) return; // null = consumer cancelled by the broker
+
+    const msg: ConsumeMessage = {
+        routingKey: raw.fields.routingKey,
+        body: raw.content,
+        ack: () => ch.ack(raw),
+        nack: (requeue = false) => ch.nack(raw, false, requeue),
+    };
+
+    try {
+        await handler(msg);
+    } catch (err) {
+        console.error("[rabbitmq] handler threw:", (err as Error).message);
+        msg.nack(false); // false => no requeue, goes to DLQ if configured
     }
 }

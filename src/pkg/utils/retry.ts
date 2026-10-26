@@ -1,39 +1,24 @@
 export interface RetryOptions {
-    maxRetries?: number;
-    initialDelayMs?: number;
-    maxDelayMs?: number;
-    factor?: number;
-    retryableError?: (err: unknown) => boolean;
+    attempts: number;       // total tries including the first
+    initialDelayMs: number;
+    maxDelayMs: number;
+    isRetryable?: (err: unknown) => boolean;
 }
 
-export async function withRetry<T>(
-    operation: () => Promise<T>,
-    options: RetryOptions = {}
-): Promise<T> {
-    const {
-        maxRetries = 3,
-        initialDelayMs = 100,
-        maxDelayMs = 2000,
-        factor = 2,
-        retryableError = () => true,
-    } = options;
+export async function retry<T>(fn: () => Promise<T>, opts: RetryOptions): Promise<T> {
+    let delay = opts.initialDelayMs;
+    let lastErr: unknown;
 
-    let attempt = 0;
-    let delay = initialDelayMs;
-
-    while (true) {
+    for (let i = 0; i < opts.attempts; i++) {
         try {
-            return await operation();
+            return await fn();
         } catch (err) {
-            attempt++;
-            if (attempt > maxRetries || !retryableError(err)) {
-                throw err;
-            }
-
-            const jitter = Math.random() * 50;
-            const waitTime = Math.min(delay + jitter, maxDelayMs);
-            await new Promise((resolve) => setTimeout(resolve, waitTime));
-            delay *= factor;
+            lastErr = err;
+            if (opts.isRetryable && !opts.isRetryable(err)) throw err;
+            if (i === opts.attempts - 1) break;
+            await new Promise((r) => setTimeout(r, delay));
+            delay = Math.min(delay * 2, opts.maxDelayMs);
         }
     }
+    throw lastErr;
 }

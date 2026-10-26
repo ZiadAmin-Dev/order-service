@@ -1,8 +1,25 @@
-import type { Knex } from "knex";
-import { env } from "../config/env";
+import type {Knex} from "knex";
+import {env} from "../config/env";
 
-const region = (process.env.REGION || env.regions[0] || "eg").toLowerCase();
-const shard = env.shards[region as keyof typeof env.shards] || env.shards.eg;
+/**
+ * Builds a knex config for the region+cluster identified by env vars.
+ *   REGION=eg|ksa|...   (required — no default so migrations can never silently hit the wrong shard)
+ *   CLUSTER=hot|archive (defaults to "hot")
+ *
+ * Drives `npm run migrate`, `migrate:rollback`, etc. The per-process shard
+ * connections used by the running app come from `knex.ts`, not this file.
+ */
+const region = process.env.REGION;
+if (!region) {
+    throw new Error("REGION env var is required (e.g. `REGION=eg npm run migrate`)");
+}
+
+const cluster = (process.env.CLUSTER ?? "hot") as "hot" | "archive";
+const shards = cluster === "hot" ? env.hotShards : env.archiveShards;
+const shard = shards[region];
+if (!shard) {
+    throw new Error(`No ${cluster} shard configured for region "${region}"`);
+}
 
 const config: Knex.Config = {
     client: "pg",
@@ -10,10 +27,10 @@ const config: Knex.Config = {
         host: shard.host,
         port: shard.port,
         user: shard.username,
-        password: shard.password || "",
+        password: shard.password,
         database: shard.name,
     },
-    pool: { min: 2, max: env.db.poolMax },
+    pool: {min: 0, max: env.db.poolMax},
     migrations: {
         directory: env.db.migrationDirectory,
         extension: env.db.migrationExtension,

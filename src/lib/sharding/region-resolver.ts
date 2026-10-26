@@ -1,21 +1,21 @@
-import { Request, Response, NextFunction } from "express";
-import { DEFAULT_REGION, isValidRegion } from "./regions";
-import { invalidRegionError } from "./errors";
+import type {Request, Response, NextFunction} from "express";
+import {isRegion} from "./regions";
+import {RegionNotResolvedError} from "./errors";
 
-export function regionResolver(req: Request, _res: Response, next: NextFunction) {
-    const rawRegion =
-        (req.query.region as string) ||
-        (req.headers["x-region"] as string) ||
-        req.cookies?.region ||
-        DEFAULT_REGION;
-
-    const normalized = rawRegion.trim().toLowerCase();
-
-    // Allow "all" for global admin fan-out queries
-    if (normalized === "all" || isValidRegion(normalized)) {
-        req.region = normalized;
-        return next();
+/**
+ * Reads the region from the `X-Region` header only. "all" is preserved for
+ * admin fan-out reads; writes must resolve to one concrete region.
+ */
+export function resolveRegion(req: Request, _res: Response, next: NextFunction) {
+    const raw = req.headers["x-region"]; // x-region: eg
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (value && (value === "all" || isRegion(value))) {
+        req.region = value;
     }
+    next();
+}
 
-    return next(invalidRegionError);
+export function requireRegion(req: Request, _res: Response, next: NextFunction) {
+    if (!req.region) throw RegionNotResolvedError;
+    next();
 }

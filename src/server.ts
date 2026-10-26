@@ -2,27 +2,26 @@ import "reflect-metadata";
 import http from "http";
 import { createApp } from "./app";
 import { env } from "./lib/config/env";
-import { closeDB } from "./lib/knex/knex";
+import { destroyAll } from "./lib/knex/knex";
 import { cacheProvider } from "./lib/cache/init";
-import { wsGateway } from "./lib/websocket/ws-server";
+import { attachWsServer } from "./lib/websocket/ws-server";
 import { logger } from "./lib/logger/logger";
 import { container } from "./lib/di/container";
 import { TOKENS } from "./lib/di/tokens";
 import { IMessageBroker } from "./pkg/messaging/message-broker.interface";
-import { CoreEventsConsumer } from "./lib/core-events/consumer";
+import { startCoreEventsConsumer } from "./lib/core-events/consumer";
 
 const app = createApp();
 const server = http.createServer(app);
 
 // Attach real-time WebSocket gateway
-wsGateway.attach(server);
+attachWsServer(server);
 
 // Start RabbitMQ consumer for core-service events
 const broker = container.resolve<IMessageBroker>(TOKENS.MessageBroker);
 if (broker && typeof broker.connect === "function") {
     broker.connect().then(() => {
-        const consumer = new CoreEventsConsumer(broker, cacheProvider);
-        consumer.start().catch((err) => {
+        startCoreEventsConsumer(broker).catch((err) => {
             logger.warn("Core events consumer start warning:", { error: (err as Error).message });
         });
     }).catch((err) => {
@@ -30,9 +29,9 @@ if (broker && typeof broker.connect === "function") {
     });
 }
 
-server.listen(env.PORT, () => {
-    logger.info(`order-service running on port ${env.PORT} in ${env.NODE_ENV} mode`, {
-        port: env.PORT,
+server.listen(env.port, () => {
+    logger.info(`order-service running on port ${env.port} in ${env.isProduction ? "production" : "development"} mode`, {
+        port: env.port,
         regions: env.regions,
     });
 });
@@ -48,7 +47,7 @@ async function shutdown() {
     server.close(async () => {
         logger.info("HTTP server closed. Terminating external connections...");
         try {
-            await closeDB();
+            await destroyAll();
             await cacheProvider.close().catch(() => {});
             if (broker && typeof broker.close === "function") {
                 await broker.close().catch(() => {});

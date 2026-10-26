@@ -4,7 +4,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { env } from "./lib/config/env";
 import { correlationId } from "./lib/correlation/correlationId";
-import { regionResolver } from "./lib/sharding/region-resolver";
+import { resolveRegion } from "./lib/sharding/region-resolver";
 import { routes } from "./routes";
 import { errorHandler } from "./lib/error/errorHandler";
 
@@ -17,10 +17,8 @@ export function createApp(): express.Application {
     app.use(express.json({ limit: "10mb" }));
     app.use(cookieParser());
     app.use(correlationId);
-    app.use(regionResolver);
-
+    app.use(resolveRegion);
     app.use("/api", routes);
-
     app.use(errorHandler);
 
     return app;

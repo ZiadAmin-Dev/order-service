@@ -1,4 +1,6 @@
-import { AppError } from "../error/AppError";
+import {AppError} from "../error/AppError";
 
-export const invalidRegionError = new AppError("Invalid or unsupported region specified", 400);
-export const missingRegionError = new AppError("Region must be specified", 400);
+export const RegionNotResolvedError = new AppError(
+    "Region not resolved. Provide ?region= or X-Region header, or authenticate.",
+    400,
+);

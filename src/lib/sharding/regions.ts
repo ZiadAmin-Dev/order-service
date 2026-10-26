@@ -1,8 +1,16 @@
-import { env } from "../config/env";
+import {env} from "../config/env";
 
-export const SUPPORTED_REGIONS = env.regions;
-export const DEFAULT_REGION = env.regions[0] || "eg";
+const set = new Set(env.regions);
 
-export function isValidRegion(region: string): boolean {
-    return SUPPORTED_REGIONS.includes(region.toLowerCase());
+export const REGIONS: ReadonlyArray<string> = env.regions;
+
+export function isRegion(candidate: string | undefined | null): candidate is string {
+    return typeof candidate === "string" && set.has(candidate);
+}
+
+export function assertRegion(candidate: string | undefined | null): string {
+    if (!isRegion(candidate)) {
+        throw new Error(`Unknown region: "${candidate}". Known: ${env.regions.join(",")}`);
+    }
+    return candidate;
 }

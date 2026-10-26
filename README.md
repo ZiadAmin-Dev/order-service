@@ -1,4 +1,4 @@
-# CLAUDE.md — Order & Payments Service Guidelines
+# README.md — Order & Payments Service Guidelines
 
 These rules apply to the **`order-service`** microservice of the **QuickBite** platform. They mirror the conventions of `core-service` while adding constraints specific to this service (DTO responses, region-sharded Postgres, Redis caching, sync/async I/O with `core-service`, WebSocket live updates, Kashier v3 payment integration).
 
@@ -126,3 +126,60 @@ Unlike `core-service` where raw entities were sometimes returned, in `order-serv
 5. Restaurant Finance (Balances & Payouts)
 6. WebSocket Real-time Integration
 7. Archival System
+
+---
+
+## 9. Code style — what to avoid
+
+- ❌ ORMs, decorators on entities, repository classes (we use functions).
+- ❌ Returning entities from controllers (use response DTOs).
+- ❌ Cross-module repository imports (use service of that module, or move shared logic to `lib/`).
+- ❌ Business logic in controllers. Controllers do: validate → call service → DTO → respond.
+- ❌ `try { ... } catch (e) { console.log }`. Always rethrow or convert to `AppError`.
+- ❌ `any` in service signatures. DTOs and entities everywhere.
+- ❌ Silent failures in webhooks. Webhook handlers must persist their result (success/failure) so retries are deterministic.
+- ❌ Mutating the input body or DTO inside a service. Treat them as read-only.
+- ❌ Creating new env vars without adding them to `lib/config/env.ts` zod schema.
+
+---
+
+## 10. When implementing a new module
+
+Follow this exact order — never skip ahead:
+
+1. Migration (table + indexes + FKs + comments naming the supporting query).
+2. Entity class.
+3. Request DTO(s).
+4. Response DTO(s).
+5. Repository functions.
+6. Service class (register in `container.ts`).
+7. Controller class (register in `container.ts`).
+8. Module `routes.ts`.
+9. Mount in `src/routes.ts`.
+10. Smoke test the endpoint manually before moving on.
+
+Implement one module end-to-end before starting the next. Order: **orders → payments → deliveries → agents → restaurant-finance → websocket integration → archival worker**. See `docs/implementation-plan.md`.
+
+---
+
+## 11. Reference docs (in `docs/`)
+
+- `docs/database-design.md` — full schema, FK map, indexes, sharding plan.
+- `docs/system-design.md` — region sharding, redis layers, sync/async flows, kashier, websocket, archival.
+- `docs/folder-structure.md` — annotated tree, layer rules.
+- `docs/api-contracts.md` — endpoint-by-endpoint request/response DTOs and error codes.
+- `docs/business-logic/` — one file per module describing flows, invariants, RBAC, status machines.
+- `docs/implementation-plan.md` — step-by-step build order with acceptance checks.
+- `docs/implementation-audit.md` — provides a comprehensive audit of the current `order-service` implementation
+
+---
+
+## 12. Out of scope (do not build)
+
+- Analytics service / analytics DB and any async event emission to it (separate service, future).
+- Outbound async events from this service to **any** consumer in this milestone — async with core-service is **inbound only** (cache invalidation).
+- DevOps / deploy infra, observability stack, benchmark/perf testing — separate effort, future.
+- Read replicas — single primary per region for now; revisit when traffic justifies it.
+- Recommendations, loyalty, AI delivery optimization, reviews (PRD §13).
+- Payouts as a separate table — payouts are modeled as a `transaction_type` in the `transactions` table.
+- Incentives / promo codes (explicit user instruction).

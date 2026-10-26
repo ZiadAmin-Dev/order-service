@@ -1,92 +1,63 @@
-import { Server as HttpServer } from "http";
-import { WebSocketServer, WebSocket } from "ws";
-import { authenticateWebSocket, AuthenticatedWebSocketContext } from "./ws-auth";
-import { logger } from "../logger/logger";
+import type {Server as HttpServer} from "http";
+import {Server as IOServer} from "socket.io";
+import {createAdapter} from "@socket.io/redis-adapter";
+import {toMs} from "../../pkg/utils/time";
+import {env} from "../config/env";
+import {logger} from "../logger/logger";
+import {cacheProvider} from "../cache/init";
+import {authenticateHandshake, permittedChannels} from "./ws-auth";
 
-interface ExtendedWebSocket extends WebSocket {
-    isAlive?: boolean;
-    authContext?: AuthenticatedWebSocketContext;
-}
+/**
+ * Attaches a socket.io server on /ws with a Redis pub/sub adapter.
+ * Multi-process fan-out is automatic: `io.to(room).emit(...)` on any worker
+ * reaches every connected socket in every worker for that room.
+ *
+ * Reuses the shared `redisClient` for PUBLISH; duplicates it for the
+ * subscriber (ioredis can't serve commands once in subscribe mode).
+ */
+export function attachWsServer(httpServer: HttpServer): IOServer {
+    const io = new IOServer(httpServer, {
+        path: "/ws",
+        serveClient: false,
+        pingInterval: toMs(env.ws.heartbeatSec,'s'),
+    });
+    const redisClient = cacheProvider.getClient();
+    io.adapter(createAdapter(redisClient, redisClient.duplicate()));
 
-export class WebSocketGateway {
-    private wss: WebSocketServer | null = null;
-    private rooms = new Map<string, Set<ExtendedWebSocket>>();
+    io.use((socket, next) => {
+        try {
+            const user = authenticateHandshake(socket.handshake);
+            socket.data.user = user;
+            socket.data.allowed = permittedChannels(user);
+            next();
+        } catch (err) {
+            next(err as Error);
+        }
+    });
 
-    attach(server: HttpServer): void {
-        this.wss = new WebSocketServer({ server, path: "/ws" });
+    io.on("connection", (socket) => {
+        const allowed: Set<string> = socket.data.allowed;
+        const user = socket.data.user;
+        socket.emit("hello", {allowedChannels: [...allowed]});
 
-        this.wss.on("connection", (ws: ExtendedWebSocket, req) => {
-            const auth = authenticateWebSocket(req);
-            if (!auth) {
-                ws.close(4001, "Unauthorized");
+        socket.on("subscribe", (channel: string, ack?: (res: unknown) => void) => {
+            if (typeof channel !== "string" || !allowed.has(channel)) {
+                ack?.({ok: false, error: "not permitted"});
                 return;
             }
-
-            ws.isAlive = true;
-            ws.authContext = auth;
-
-            // Subscribe to authorized rooms
-            for (const room of auth.authorizedRooms) {
-                this.joinRoom(room, ws);
-            }
-
-            ws.on("pong", () => {
-                ws.isAlive = true;
-            });
-
-            ws.on("close", () => {
-                for (const room of auth.authorizedRooms) {
-                    this.leaveRoom(room, ws);
-                }
-            });
+            socket.join(channel);
+            ack?.({ok: true});
+            socket.emit("subscribed", {channel});
         });
 
-        // Heartbeat interval
-        const interval = setInterval(() => {
-            if (!this.wss) return;
-            this.wss.clients.forEach((ws: any) => {
-                if (ws.isAlive === false) return ws.terminate();
-                ws.isAlive = false;
-                ws.ping();
-            });
-        }, 30000);
-
-        this.wss.on("close", () => {
-            clearInterval(interval);
+        socket.on("unsubscribe", (channel: string) => {
+            if (typeof channel === "string") socket.leave(channel);
         });
-    }
 
-    private joinRoom(room: string, ws: ExtendedWebSocket): void {
-        if (!this.rooms.has(room)) {
-            this.rooms.set(room, new Set());
-        }
-        this.rooms.get(room)!.add(ws);
-    }
+        socket.on("disconnect", (reason) => {
+            logger.info("ws disconnected", {userId: user.userId, reason});
+        });
+    });
 
-    private leaveRoom(room: string, ws: ExtendedWebSocket): void {
-        const set = this.rooms.get(room);
-        if (set) {
-            set.delete(ws);
-            if (set.size === 0) this.rooms.delete(room);
-        }
-    }
-
-    broadcast(room: string, event: string, payload: any): void {
-        const subscribers = this.rooms.get(room);
-        if (!subscribers || subscribers.size === 0) return;
-
-        const message = JSON.stringify({ event, data: payload, timestamp: Date.now() });
-
-        for (const ws of subscribers) {
-            if (ws.readyState === WebSocket.OPEN) {
-                try {
-                    ws.send(message);
-                } catch (err) {
-                    logger.error("Failed to emit WebSocket message:", { error: (err as Error).message });
-                }
-            }
-        }
-    }
+    return io;
 }
-
-export const wsGateway = new WebSocketGateway();

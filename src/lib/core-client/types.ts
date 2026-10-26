@@ -1,30 +1,7 @@
-export interface BranchInfo {
-    id: number;
-    restaurantId: number;
-    name: string;
-    countryCode: string;
-    isActive: boolean;
-    acceptOrders: boolean;
-    lat: number;
-    lng: number;
-    deliveryRadiusKm: number;
-    currency: string;
-    commission: number; // percentage, e.g. 15
-}
-
-export interface ValidatedProduct {
-    productId: number;
-    name: string;
-    price: number; // minor units
-    isAvailable: boolean;
-    inStock: boolean;
-    imageUrl?: string;
-}
-
-export interface CustomerAddressInfo {
-    id: number;
-    customerId: number;
-    addressText: string;
-    lat: number;
-    lng: number;
+export interface CoreClientRequest {
+    method: "GET" | "POST" | "PATCH" | "DELETE";
+    path: string;                       // e.g. "/api/internal/branches/123"
+    body?: unknown;                    // e.g. { "name": "New Branch Name" }
+    correlationId?: string;            // e.g. "123e4567-e89b-12d3-a456-426614174000"
+    idempotencyKey?: string;          // e.g. "123b4567-e9wb-1fsd3-a4446-42ffas24174000"
 }
