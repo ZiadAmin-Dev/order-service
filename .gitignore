@@ -6,5 +6,10 @@ dist/
 .idea/
 .vscode/
 
+# local agent working files — not tracked
+AGENTS.md
+.agent/
+.agents/
+
 # local experimentation scripts — not tracked
 play/

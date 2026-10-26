@@ -2,6 +2,8 @@
 
 These rules apply to the **`order-service`** microservice of the **QuickBite** platform. They mirror the conventions of `core-service` while adding constraints specific to this service (DTO responses, region-sharded Postgres, Redis caching, sync/async I/O with `core-service`, WebSocket live updates, Kashier v3 payment integration).
 
+> **Current state (October 2026):** the domain implementation modules (`orders`, `payments`, `deliveries`, `agents`, `restaurant-finance`) have been pruned from the working tree in the workspace restructure (commit `5ca9f37`); only the `health` module and the `lib/` / `pkg/` infrastructure remain. The rules below are the standing conventions for rebuilding those modules — the pre-restructure code and docs remain available in git history, and the consumer-side event pipeline docs live in [docs/system-design/event-driven-architecture.md](docs/system-design/event-driven-architecture.md).
+
 When in doubt, look at how `core-service` does it and follow that exact pattern. Deviate **only** where an intentional deviation is documented.
 
 ---
@@ -164,13 +166,15 @@ Implement one module end-to-end before starting the next. Order: **orders → pa
 
 ## 11. Reference docs (in `docs/`)
 
-- `docs/database-design.md` — full schema, FK map, indexes, sharding plan.
-- `docs/system-design.md` — region sharding, redis layers, sync/async flows, kashier, websocket, archival.
-- `docs/folder-structure.md` — annotated tree, layer rules.
+- `docs/system-design/database-design.md` — full schema, FK map, indexes, sharding plan.
+- `docs/system-design/system-design.md` — region sharding, redis layers, sync/async flows, kashier, websocket, archival.
+- `docs/system-design/event-driven-architecture.md` — consumer-side EDA: RabbitMQ topology, dedup pipeline, DLQ model, CoreClient fallback.
+- `docs/system-design/folder-structure.md` — annotated tree, layer rules.
 - `docs/api-contracts.md` — endpoint-by-endpoint request/response DTOs and error codes.
-- `docs/business-logic/` — one file per module describing flows, invariants, RBAC, status machines.
+- `docs/core-service-integration.md` — HTTP and event integration with core-service.
 - `docs/implementation-plan.md` — step-by-step build order with acceptance checks.
-- `docs/implementation-audit.md` — provides a comprehensive audit of the current `order-service` implementation
+- `docs/implementation-audit.md` — comprehensive audit of the current `order-service` implementation.
+- `docs/business-logic/` — module flow docs (module files restored alongside their modules; see git history for the pre-restructure versions).
 
 ---
 
