@@ -15,7 +15,7 @@ multiple audits reflexively — each is a full read-through pass.
 | 4 | Diagnose slow listing endpoints | `prevent-n-plus-one` | `database-review` (if indexes missing) | Batched (`whereIn`) queries; per-row loop eliminated |
 | 5 | New module wiring | `dependency-injection-review` | — | TOKENS registered, container startup verified |
 | 6 | Test-debug-fix loop | `testing-and-debugging` | the skill matching the failing layer | Failing test → root cause via architecture → fix → green run evidence |
-| 7 | Consume a core.events change | *(no dedicated skill — see gaps)* | `database-review` | Idempotent consumer deduping on `core-events:dedupe:{event_id}`; contract in `docs/core-service-integration.md` |
+| 7 | Consume a core.events change | `event-inbox-consumer` | `database-review` | Idempotent consumer deduping on `core-events:dedupe:{event_id}`; contract in `docs/core-service-integration.md` |
 | 8 | Review money paths (orders, payouts, commissions) | `response-dto-validation` | `database-review` | Integer minor units everywhere (§5), currency string present |
 | 9 | Webhook/idempotent payment flows | `testing-and-debugging` | `database-review` | Optimistic `WHERE status = :expected` updates; idempotency enforced (§8) |
 

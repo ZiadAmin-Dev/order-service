@@ -62,14 +62,29 @@ Compared against the categories audited in core-service and this repo's invarian
 
 ## 5. Open items / manual actions
 
-1. Optional next improvement: author a consumer-side **event ingestion** skill for this repo
-   (idempotent consumption, dedupe, DLQ handling) mirroring `event-outbox-publishing`'s rigor.
-2. Optional: caching / retries / security skills to match core-service coverage parity.
-3. `docs/ai/skills-inventory.json` was written as structured JSON and parsed at creation
-   (verified: `ConvertFrom-Json` equivalent validation not re-run here — flagged for review).
-4. One canonical home for skills now exists (`.opencode/skills/` after the migration). If any
-   future directory (e.g. re-adding `.agents/`) is used alongside it, remember OpenCode loads
-   **both** paths — avoid ID collisions.
+1. ~~Optional next improvement: author a consumer-side **event ingestion** skill~~ **Done
+   2026-10-27**: `event-inbox-consumer` was authored fresh from this repo's consumer design doc
+   (consumer code itself is not yet in `src/` — the skill flags that its file references are
+   design-spec until `src/lib/core-events/` is implemented).
+2. Optional: caching / security skills to reach core-service coverage parity — caching deferred
+   until order-side caching becomes a design element.
+3. Same-day expansion: **19 skills** were added to `.opencode/skills/` on 2026-10-27 — 18 ported
+   from core-service `.opencode/skills/` and adapted (sharding discipline, order-domain examples,
+   core-specific claims marked **Undetermined**) plus the fresh `event-inbox-consumer`. Not
+   ported deliberately: the 4-skill caching block, `event-outbox-publishing` (publisher-side,
+   stays in core-service; its consumer counterpart was written instead), core's
+   testing-strategy/unit-integration/regression-prevention trio and `prevent-n-plus-one-queries`
+   / data-integrity (already owned by this repo's audit skills), query-performance (owned by
+   `database-review`), and skill-authoring tooling. List of ported IDs:
+   `repository-exploration`, `safe-code-changes`, `problem-solving`, `code-review`,
+   `documentation`, `separation-of-concerns`, `naming-conventions`, `error-handling`,
+   `typescript-best-practices`, `express-api-design`, `request-validation`, `input-security`,
+   `logging-and-observability`, `pagination`, `sql-and-postgresql`, `transactions-and-acid`,
+   `idempotency`, `concurrency-and-race-conditions`, `retries-and-timeouts`.
+4. Skills remain gitignored under `.opencode/` — `docs/ai/skills-inventory.json` (full 26-skill
+   set, validated with `ConvertFrom-Json`) is their trackable record.
+5. One canonical home now exists (`.opencode/skills/`); do not re-parallelize with `.agents/`
+   (OpenCode loads both paths — ID collisions would be silent).
 
 ## 6. What changed in this repo
 
@@ -78,4 +93,5 @@ Compared against the categories audited in core-service and this repo's invarian
 - Post-audit migration (user-requested): skills moved `.agents/skills/` → `.opencode/skills/`;
   `.agents/` deleted; `.opencode/` added to `.gitignore` (skills remain untracked). An empty
   unreferenced `.opencode/skills/quick-bite-review/` leftover folder was found during migration and
-  deleted. No source code, migrations, AGENTS.md, or existing docs were modified.
+  deleted. Same day, 19 skills were added (see §5.3). No source code, migrations, AGENTS.md, or
+  pre-existing docs were modified.
