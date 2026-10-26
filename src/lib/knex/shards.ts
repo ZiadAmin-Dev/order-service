@@ -1,27 +1,24 @@
-import knex, { Knex } from "knex";
-import { env } from "../config/env";
-import { DEFAULT_REGION } from "../sharding/regions";
+import knex, {Knex} from "knex";
+import {env} from "../config/env";
+import {ShardConfig} from "../sharding/shard-config";
+import {assertRegion} from "../sharding/regions";
 
-const shardInstances = new Map<string, Knex>();
-const archiveShardInstances = new Map<string, Knex>();
+type Cluster = "hot" | "archive";
 
-function createKnexConfig(connectionConfig: {
-    host: string;
-    port: number;
-    username: string;
-    password?: string;
-    name: string;
-}): Knex.Config {
+function buildConfig(shard: ShardConfig): Knex.Config {
     return {
         client: "pg",
         connection: {
-            host: connectionConfig.host,
-            port: connectionConfig.port,
-            user: connectionConfig.username,
-            password: connectionConfig.password || "",
-            database: connectionConfig.name,
+            host: shard.host,
+            port: shard.port,
+            user: shard.username,
+            password: shard.password,
+            database: shard.name,
         },
-        pool: { min: 2, max: env.db.poolMax },
+        pool: {
+            min: 0,
+            max: env.db.poolMax,
+        },
         migrations: {
             directory: env.db.migrationDirectory,
             extension: env.db.migrationExtension,
@@ -29,42 +26,36 @@ function createKnexConfig(connectionConfig: {
     };
 }
 
-export function getShard(region: string = DEFAULT_REGION): Knex {
-    const reg = region.toLowerCase();
-    let instance = shardInstances.get(reg);
-    if (!instance) {
-        const conf = env.shards[reg as keyof typeof env.shards];
-        if (!conf) {
-            throw new Error(`No database shard configured for region: ${region}`);
-        }
-        instance = knex(createKnexConfig(conf));
-        shardInstances.set(reg, instance);
+const hotByRegion = new Map<string, Knex>();
+const archiveByRegion = new Map<string, Knex>();
+
+export function getHotShard(region: string): Knex {
+    assertRegion(region);
+    let conn = hotByRegion.get(region);
+    if (!conn) {
+        conn = knex(buildConfig(env.hotShards[region]));
+        hotByRegion.set(region, conn);
     }
-    return instance;
+    return conn;
 }
 
-export function getArchiveShard(region: string = DEFAULT_REGION): Knex {
-    const reg = region.toLowerCase();
-    let instance = archiveShardInstances.get(reg);
-    if (!instance) {
-        const conf = env.archiveShards[reg as keyof typeof env.archiveShards];
-        if (!conf) {
-            throw new Error(`No archive database shard configured for region: ${region}`);
-        }
-        instance = knex(createKnexConfig(conf));
-        archiveShardInstances.set(reg, instance);
+export function getArchiveShard(region: string): Knex {
+    assertRegion(region);
+    let conn = archiveByRegion.get(region);
+    if (!conn) {
+        conn = knex(buildConfig(env.archiveShards[region]));
+        archiveByRegion.set(region, conn);
     }
-    return instance;
+    return conn;
 }
 
 export async function destroyAllShards(): Promise<void> {
-    for (const [_, inst] of shardInstances) {
-        await inst.destroy();
-    }
-    shardInstances.clear();
+    await Promise.all([...hotByRegion.values()].map((c) => c.destroy()));
+    await Promise.all([...archiveByRegion.values()].map((c) => c.destroy()));
+    hotByRegion.clear();
+    archiveByRegion.clear();
+}
 
-    for (const [_, inst] of archiveShardInstances) {
-        await inst.destroy();
-    }
-    archiveShardInstances.clear();
+export function listConfiguredRegions(cluster: Cluster): string[] {
+    return Object.keys(cluster === "hot" ? env.hotShards : env.archiveShards);
 }
